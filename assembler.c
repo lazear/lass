@@ -96,9 +96,11 @@ int parse_line(char* line) {
 
 	if (!strcmp(pch, "db")) {
 
-		int b = atoi(strtok(NULL, " "), 10);
-		printf("db: %d val\n", b);
-		output[current_position++] = b & 0xff;
+		char* pch = strtok(NULL, " ");
+		char b = *pch;
+		b = (isdigit(b) == 1) ? atoi(b) : b;
+		//printf("db: %d val\n", b);
+		output[current_position++] = b;
 		return;
 	}
 
@@ -144,32 +146,41 @@ int parse_line(char* line) {
 		int opcode 	= syn[0];
 		int operand = syn[1];
 		int ext = wextension(inst);
-		printf("inst %s %d\n", inst, immediate);
+		printf("inst %s %d %d\n", inst, ext, immediate);
+
+		int s = 1;
+		int w = 1;
+		int m = 0;
 
 		switch(opcode) {
-
+			case ADD: case OR: case ADC: case SBB: case AND: case SUB: case XOR: case CMP:
+				opcode = 0x80;
+				s = 1;			// add byte (signed?)	
+				break;
 			case MOV: {
 				// Move is unique because it has a bunch of disparate opcodes
-				write_word(OPCODE(MOV_IMM, 1, 1)| MODRM(mode, MOV_IMM_EXT, operand) << 8);
-				write_word(immediate);
+				opcode = MOV_IMM;
+				s = 0;
 				break;
 			} 
 			case JMP :{
 				if (jmp_to >= 0) {	/* Jump SHORT */
 					int offset = (immediate - current_position - 2);
-					write_word(OPCODE(0xE9, 1, 1) | (offset & 0xFF) << 8);
+					opcode = 0xE9;
+					m = (offset & 0xFF);
+					immediate = -1;
+					jmp_to = -1;
 				} else {	/* Jump ABSOLUTE */
-					write_word(OPCODE(0xFF, 1, 1) | MODRM(mode, 4, syn[1]) << 8);
+					opcode = 0xFF;
 				}
 				break;
 			}
-			default: {
-				write_word(OPCODE(opcode, 1, 1)| MODRM(mode, ext, operand) << 8);
-				if (immediate >= 0 || jmp_to >= 0) {
-					write_dword(immediate);
-				}
+			default: 
 				break;
-			}
+		}
+		write_word(OPCODE(opcode, s, w) | ((m > 0) ? m : MODRM(mode, ext, operand)) << 8);
+		if (immediate >= 0 || jmp_to >= 0) {
+			(s == 1) ? ((opcode == 0x80) ? write_byte(immediate) : write_dword(immediate)) : write_word(immediate);
 		}
 
 	} else {
@@ -182,6 +193,8 @@ int parse_line(char* line) {
 }
 
 int main(int argc, char* argv[]) {
+	syntax s[4] = {GENSYN(2)};
+	printf("%s %d\n",s[0].name, s[0].code );
 	if (argc < 2)
 		return -1;
 	char* fname = argv[1];

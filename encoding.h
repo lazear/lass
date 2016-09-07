@@ -50,39 +50,46 @@ Reg: eax */
 #define COND_NLE	15	// Great than >
 #define COND_G 		(COND_NLE)
 
-#define ADD 0x00
-#define ADD_EXT		0
 
-#define AND			0x20	// AND with immediate is same as ADD with immediate
-#define AND_EXT		4
 
-#define CMP			0x38 	
-#define CMP_EXT		7		// Reg field extension
-
+#define ADD 		0x00
+#define OR 			0x08
+#define ADC 		0x10
+#define SBB  		0x18
+#define AND			0x20
+#define SUB			0x28
+#define XOR 		0x30
+#define CMP			0x38
+#define MOV			0x88
+#define MOV_IMM		0xC6
+#define RET 		0xC3 
+#define INT 		0xCD
+#define JMP			0xEB
+#define CLI			0xFA
 #define DEC			0xFE
 #define INC 		0xFE
+
+/* Group 1 extensions 80-84*/
+#define ADD_EXT		0
+#define OR_EXT 		1
+#define ADC_EXT		2
+#define SBB_EXT		3
+#define AND_EXT		4
+#define SUB_EXT		5
+#define XOR_EXT		6
+#define CMP_EXT		7
+
 #define DEC_EXT		1
 #define INC_EXT		0
 
-#define INT 		0xCD
-#define INT_EXT		
-#define RET 		0xC3
-#define RET_EXT
-
-#define SUB			0x28
-#define SUB_EXT		5
-
-#define JMP			0xEB
-#define MOV			0x88
-#define MOV_EXT
 #define JMP_EXT		4
-
-#define MOV_IMM		0xC6
 #define MOV_IMM_EXT	0
+
+
+
 
 #define IMM_OP		-2
 #define ONE_OP		-1
-
 #define COND(a)	(COND_##a)
 
 #define IMM_BIT 		(1<<7)
@@ -112,6 +119,16 @@ struct symbol {
 	uint32_t position;
 } symtab[256];
 
+char* low(char a[]) { char b[10]; for (int i = 0; i < strlen(a); i++) b[i] = tolower(a[i]); return b; }
+
+#define BUILDSYN2(a) {#a, a ## _EXT }
+#define BUILDSYN(a) {#a, a}
+
+#define GENSYN(o) \
+	BUILDSYN##o(ADD), \
+	BUILDSYN##o(ADC), \
+	BUILDSYN##o(INC)
+
 typedef struct syntax {
 	char name[10];
 	int code;
@@ -127,19 +144,28 @@ syntax instructions[] = {
 	{ "int", INT },
 	{ "mov", MOV }, 
 	{ "jmp", JMP },
-	{ "cmp", CMP }
+	{ "cmp", CMP },
+	{ "or", OR 	},
+	{ "adc", ADC },
+	{ "sbb", SBB },
+	{ "xor", XOR },
+	{ "cli", CLI }
 }, extensions[] = {
 	{ "add", ADD_EXT },
 	{ "and", AND_EXT },
 	{ "inc", INC_EXT },
 	{ "dec", DEC_EXT },
 	{ "sub", SUB_EXT },
-	{ "ret", RET_EXT },
-	{ "int", INT_EXT },
-	{ "mov", MOV_EXT }, 
+	{ "mov", MOV_IMM_EXT }, 
 	{ "jmp", JMP_EXT },
-	{ "cmp", CMP_EXT }
-}, registers[] = {
+	{ "cmp", CMP_EXT },
+	{ "or", OR_EXT 	},
+	{ "adc", ADC_EXT },
+	{ "sbb", SBB_EXT },
+	{ "xor", XOR_EXT }
+};
+
+syntax registers[] = {
 	{ "eax", EAX },
 	{ "ecx", ECX },
 	{ "edx", EDX },
