@@ -7,3 +7,9 @@ and edx, eax
 
 mov ecx, edx
 inc ecx
+
+sub eax, ecx
+cmp eax, eax
+end:
+mov eax, end
+jmp eax

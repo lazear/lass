@@ -76,13 +76,15 @@ Reg: eax */
 #define JMP			0xEB
 #define MOV			0x88
 #define MOV_EXT
-#define JMP_EXT
+#define JMP_EXT		4
 
 #define MOV_IMM		0xC6
 #define MOV_IMM_EXT	0
 
 #define IMM_OP		-2
 #define ONE_OP		-1
+
+#define COND(a)	(COND_##a)
 
 #define IMM_BIT 		(1<<7)
 #define OPCODE(code, sign, width) (code | ((sign & 1)<<1) | (width & 1))
@@ -101,7 +103,8 @@ rm: register/memory
 
 #define ENDIAN(x) ( ((x&0xFF) << 24) | ((x&0x0000FF00) << 8) | ((x&0x00FF0000) >> 8) | ((x&0xFF000000) >> 24))
 
-
+#define OP1(opcode, s, w ,mod, reg, rm) \
+	COMBINE(OPCODE(opcode, s, w), (MODRM(mod, reg, rm)))
 #define OP(opcode, s, w, mod, reg, rm) \
 	COMBINE(OPCODE(((reg == -2) ? IMM_BIT : opcode), s, w), (MODRM(mod, ((reg < 0) ? opcode ## _EXT : reg), rm)))
 // */
