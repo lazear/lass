@@ -6,77 +6,11 @@
 #include <ctype.h>
 
 
-#define M(e) (#e)
-
-char* upper(char* s) {
-	for (int i = 0; i < strlen(s); i++)
-		s[i] = toupper(s[i]);
-	return s;
-}
-
-struct symbol {
-	char name[32];
-	uint32_t position;
-} symtab[256];
-
-typedef struct syntax {
-	char name[10];
-	int code;
-
-} syntax;
-syntax instructions[] = {
-	{ "add", ADD },
-	{ "and", AND },
-	{ "inc", INC },
-	{ "dec", DEC },
-	{ "sub", SUB },
-	{ "ret", RET },
-	{ "int", INT },
-	{ "mov", MOV }, 
-	{ "jmp", JMP },
-	{ "cmp", CMP }
-}, extensions[] = {
-	{ "add", ADD_EXT },
-	{ "and", AND_EXT },
-	{ "inc", INC_EXT },
-	{ "dec", DEC_EXT },
-	{ "sub", SUB_EXT },
-	{ "ret", RET_EXT },
-	{ "int", INT_EXT },
-	{ "mov", MOV_EXT }, 
-	{ "jmp", 4 },
-	{ "cmp", CMP_EXT }
-}, registers[] = {
-	{ "eax", EAX },
-	{ "ecx", ECX },
-	{ "edx", EDX },
-	{ "ebx", EBX },
-	{ "esp", ESP },
-	{ "ebp", EBP },
-	{ "esi", ESI },
-	{ "edi", EDI },
-};
 
 uint32_t program_length = 0;
 uint32_t current_position = 0;
 uint32_t num_symbols = 0;
 uint8_t output[1024];
-
-/*
-x86 opcode structure
-
-opcode:
-Bit 0 (1<<0) == 1 specific 16/32 bit. Set to zero is 8 bit
-Bit 1 (1<<1) == 2, is direction flag
-d = 0(dest = memory location) add [ebx], al d= 1 add al, [ebx]
-
-d = 0, REG is source 		RM is dest
-d = 1, REG is destination 	RM is source
-
-|	1-2		0-1		0-1		0-4		0-4			Bytes
-|Opcode|Mod-R/M| SIB   | Displace|Immediate|
-
-*/
 
 int winstruction(char* inst) {
 	int nelem = sizeof(instructions)/sizeof(struct syntax);
@@ -100,7 +34,8 @@ int wregister(char* r) {
 }
 
 int wextension(char* r) {
-	for (int i = 0; i < 8; i++) {
+		int nelem = sizeof(extensions)/sizeof(struct syntax);
+	for (int i = 0; i < nelem; i++) {
 		if (strcmp(r, extensions[i].name) == 0) {
 		//	printf("\tMATCH: %s %x\n", r, extensions[i].code);
 			return extensions[i].code;
@@ -115,7 +50,7 @@ int add_symbol(char* label) {
 	}
 	symtab[num_symbols].position = current_position;
 
-	printf("New symbol %s @ 0x%x\n", symtab[num_symbols].name, current_position);
+	//printf("New symbol %s @ 0x%x\n", symtab[num_symbols].name, current_position);
 		num_symbols++;
 }
 
@@ -123,115 +58,126 @@ int find_symbol(char* label) {
 	for (int i = 0; i < num_symbols; i++)
 		if (strcmp(symtab[i].name, label) == 0)
 			return symtab[i].position;
+	if (strcmp(label, "$$") == 0)
+		return 0;
+	if (strcmp(label, "$") == 0)
+		return current_position;
 	return -1;
 }
 
-uint32_t mov_immediate(char reg, uint32_t n) {
-	int w = (n > 0xFFFF) ? 1 : 0;
-	w = 1;	// force 32 bit
-	uint32_t out = (0xB0 | (w<<3) | reg) << 16 | n << 8;	// alternate encoding
-	uint32_t op = OP(MOV_IMM, 1, 1, MOD_REG, ONE_OP, reg) << 16 | n << 8;
-	printf("%x:%x\n", out, op);
+void write_byte(uint32_t x) {
+	output[current_position++] = x & 0xFF;
 }
 
+void write_word(uint32_t x) {
+	output[current_position++] = x & 0xFF;
+	output[current_position++] = (x >> 8)& 0xFF;
+}
+
+void write_dword(uint32_t x) {
+	output[current_position++] = x & 0xFF;
+	output[current_position++] = (x >> 8)& 0xFF;
+	output[current_position++] = (x >> 16)& 0xFF;
+	output[current_position++] = (x >> 24)& 0xFF;
+}
 
 int parse_line(char* line) {
-	printf("NEW LINE: %s\n", line);						// how many items in line?
-	char * pch = strtok(line, " ,");	// split line by spaces and commas
-	char* inst;
-	uint8_t syn[3];
+	printf("%-20s\t\t", line);	
+	char* dup = malloc(strlen(line));
+	strcpy(dup, line);
+	char* pch = strtok(line, " ,");		// split line by spaces and commas
+	char* inst;							// store instruction
+	uint8_t syn[3];	
 	int count = 0;
 	int valid = 0;
-	int immediate = 0;
+	int immediate = -1;
 	int jmp_to = -1;
+	int mode = MOD_REG;					// default to MOD 11b
+
+	if (!strcmp(pch, "db")) {
+
+		int b = atoi(strtok(NULL, " "), 10);
+		printf("db: %d val\n", b);
+		output[current_position++] = b & 0xff;
+		return;
+	}
+
 	while(pch) {
 		int q = winstruction(pch);
 
-		if (q < 0) {
+		if (q < 0) {	/* Not a valid instruction */
 			switch(*pch) {
 				case 'e': {	// is this a register maybe?
 		 			q = wregister(pch);
 					break;
 				}
 				case '[':	// memory location
-
+					mode = MOD_ZERO;
 					break;
 				default:
-					
 					break;
-
 			}
-		} else {
+		} else {		/* This is an instruciton */
 			inst = pch;
 		}
 
-		if (q >= 0) 		// This is an instruction or a register
+		if (q >= 0) {	/* This is an instruction or a register */
 			syn[valid++] = q;
-		else {			// This is an immediate? or Unknown
+		} else {		/* Immediate, label? */
+
 			if (isdigit(*pch))
-				immediate = atoi(pch, 16);
-			else
-				jmp_to = find_symbol(pch);
+				immediate = atoi(pch, 16);		// Immediate
+			else {
+				jmp_to = find_symbol(pch);	// Label
+				immediate = jmp_to;
+						printf("Label @ 0x%x\t", jmp_to);
+			}
 		}
 		
 		count++;
-	//	printf("%s INSTRUCTION %x REGISTER %x SYMBOL %x\n", pch, winstruction(pch), wregister(pch), find_symbol(pch) );
 		pch = strtok(NULL, " ,");		// get next token
 	}
 
-	if (jmp_to != -1) printf("Jmp to %x\n", jmp_to);
+	/* All tokens have been removed from string now */
 	if (valid < count || valid == 2) {
-		printf("ONE OPERAND ONLY\n");
-		switch(syn[0]) {
-			int opcode = syn[0];
-			int ext = wextension(inst);
+		//printf("ONE OPERAND ONLY\n");
+		int opcode 	= syn[0];
+		int operand = syn[1];
+		int ext = wextension(inst);
+		printf("inst %s %d\n", inst, immediate);
+
+		switch(opcode) {
 
 			case MOV: {
-				output[current_position++] = OPCODE(MOV_IMM, 1, 1);
-				output[current_position++] = MODRM(MOD_REG, MOV_IMM_EXT, syn[1]);
-				if (jmp_to != -1)
-					immediate = jmp_to;
-				output[current_position++] = immediate & 0xFF;
-				output[current_position++] = (immediate >> 8)& 0xFF;
-				output[current_position++] = (immediate >> 16)& 0xFF;
-				output[current_position++] = (immediate >> 24)& 0xFF;
+				// Move is unique because it has a bunch of disparate opcodes
+				write_word(OPCODE(MOV_IMM, 1, 1)| MODRM(mode, MOV_IMM_EXT, operand) << 8);
+				write_word(immediate);
 				break;
-			} case INC: {
-				if (strcmp(inst, "inc") == 0) {
-					output[current_position++] = OPCODE(INC, 1, 1);
-					output[current_position++] = MODRM(MOD_REG, ext, syn[1]);
-				} else {
-					output[current_position++] = OPCODE(INC, 1, 1);
-					output[current_position++] = MODRM(MOD_REG, ext, syn[1]);
+			} 
+			case JMP :{
+				if (jmp_to >= 0) {	/* Jump SHORT */
+					int offset = (immediate - current_position - 2);
+					write_word(OPCODE(0xE9, 1, 1) | (offset & 0xFF) << 8);
+				} else {	/* Jump ABSOLUTE */
+					write_word(OPCODE(0xFF, 1, 1) | MODRM(mode, 4, syn[1]) << 8);
 				}
-				break;
-			} case JMP :{
-					if (jmp_to >= 0) {
-					output[current_position++] = OPCODE(JMP, 1, 1);
-					printf("Jmp to %x\n", jmp_to);
-				} else 
-					output[current_position++] = OPCODE(0xFF, 1, 1);
-					output[current_position++] = MODRM(MOD_REG, 4, syn[1]);
 				break;
 			}
 			default: {
-				output[current_position++] = OPCODE(syn[0], 1, 1);
-				output[current_position++] = MODRM(MOD_REG, wextension(inst), syn[1]);
-				output[current_position++] = immediate & 0xFF;
-				output[current_position++] = (immediate >> 8)& 0xFF;
-				output[current_position++] = (immediate >> 16)& 0xFF;
-				output[current_position++] = (immediate >> 24)& 0xFF;
+				write_word(OPCODE(opcode, 1, 1)| MODRM(mode, ext, operand) << 8);
+				if (immediate >= 0 || jmp_to >= 0) {
+					write_dword(immediate);
+				}
 				break;
 			}
 		}
 
 	} else {
-		//printf("%x", OP1(syn[0], 1, 1, MOD_REG, syn[1], syn[2]));
+		//printf("%x", OP1(syn[0], 1, 1, mode, syn[1], syn[2]));
 		output[current_position++] = OPCODE(syn[0], 1, 1) & 0xFF;
-		output[current_position++] = MODRM(MOD_REG, syn[1], syn[2]) & 0xFF;
+		output[current_position++] = MODRM(mode, syn[1], syn[2]) & 0xFF;
 		printf("%x %x\n", OPCODE(syn[0], 1, 1), MODRM(MOD_REG, syn[1], syn[2]) );
 	}
-
 	return 1;
 }
 
@@ -277,11 +223,10 @@ int main(int argc, char* argv[]) {
 		}
 	}
 	FILE* fd = fopen("output", "wb");
-	puts(output);
 	fwrite(output, 1, current_position, fd);
 	fflush(fd);
 	fclose(fd);
-	printf("find end: %x\n", find_symbol("main"));
-//	free(buffer);
-	return 1;
+	free(buffer);
+	free(start);
+	return 0;
 }
