@@ -2,38 +2,53 @@
 #include <stdint.h>
 #include <fcntl.h>
 #include <assert.h>
+#include "encoding.h"
+#include <ctype.h>
 
-typedef struct _reg {
+
+#define M(e) (#e)
+
+char* upper(char* s) {
+	for (int i = 0; i < strlen(s); i++)
+		s[i] = toupper(s[i]);
+	return s;
+}
+
+struct symbol {
+	char name[32];
+	uint32_t position;
+} symtab[256];
+
+typedef struct syntax {
 	char name[10];
-	uint8_t opcode;
-} reg;
+	int code;
 
-typedef struct opcode {
+} syntax;
+syntax instructions[] = {
+	{ "add", ADD },
+	{ "and", AND },
+	{ "inc", INC },
+	{ "dec", DEC },
+	{ "sub", SUB },
+	{ "ret", RET },
+	{ "int", INT },
+	{ "mov", MOV }, 
+	{ "jmp", JMP }
+}, registers[] = {
+	{ "eax", EAX },
+	{ "ecx", ECX },
+	{ "edx", EDX },
+	{ "ebx", EBX },
+	{ "esp", ESP },
+	{ "ebp", EBP },
+	{ "esi", ESI },
+	{ "edi", EDI },
+};
 
-}opcode;
-
-#define EAX 0
-#define ECX 1
-#define EDX 2
-#define EBX 3
-#define ESP 4
-#define EBP 5
-#define ESI 6
-#define EDI 7
-
-/* 
-Zero: [eax]
-One: [eax+ disp8]
-Four: [eax+ disp32]
-Reg: eax */
-#define MOD_ZERO	0
-#define MOD_ONE		1
-#define MOD_FOUR	2
-#define MOD_REG		3
-
-#define ADD 		0
-
-#define IMM 		(1<<7)
+uint32_t program_length = 0;
+uint32_t current_position = 0;
+uint32_t num_symbols = 0;
+uint8_t* buffer = NULL;
 
 /*
 x86 opcode structure
@@ -49,18 +64,88 @@ d = 1, REG is destination 	RM is source
 |	1-2		0-1		0-1		0-4		0-4			Bytes
 |Opcode|Mod-R/M| SIB   | Displace|Immediate|
 
-
-
 */
 
-#define OPCODE(code, d, s) (code | ((d & 1)<<1) | (s & 1))
-#define MODRM(mod, reg, rm)	(((mod & 0x3) << 6)| ((reg & 0x7) << 3) | (rm & 0x7))
+int winstruction(char* inst) {
+	int nelem = sizeof(instructions)/sizeof(struct syntax);
+	for (int i = 0; i < nelem; i++) {
+		if (strcmp(inst, instructions[i].name) == 0) {
+			printf("\tMATCH: %s %x\n", inst, instructions[i].code);
+			return instructions[i].code;
+		}
+	}
+	return -1;
+}
+
+int wregister(char* r) {
+	for (int i = 0; i < 8; i++) {
+		if (strcmp(r, registers[i].name) == 0) {
+			printf("\tMATCH: %s %x\n", r, registers[i].code);
+			return registers[i].code;
+		}
+	}
+	return -1;
+}
+
+int add_symbol(char* label) {
+	for (int i = 0; i < 32 && i < strlen(label); i++) {
+		symtab[num_symbols].name[i] = label[i];
+	}
+	symtab[num_symbols].position = current_position;
+
+	printf("New symbol %s @ 0x%x\n", symtab[num_symbols].name, current_position);
+		num_symbols++;
+}
+
+
+int parse_line(char* line) {
+	printf("NEW LINE: %s\n", line);						// how many items in line?
+	char * pch = strtok(line, " ,");	// split line by spaces and commas
+
+	uint8_t syn[3];
+	int count = 0;
+	int valid = 0;
+	int immediate = 0;
+
+	while(pch) {
+		int q = winstruction(pch);
+
+		if (q < 0)
+			switch(*pch) {
+				case 'e': {	// is this a register maybe?
+		 			q = wregister(pch);
+					break;
+				}
+				case '[':	// memory location
+
+					break;
+
+			}				
+
+		if (q >= 0) 		// This is an instruction or a register
+			syn[valid++] = q;
+		else 			// This is an immediate? or Unknown
+			immediate = atoi(pch, 16);
+		
+		count++;
+		pch = strtok(NULL, " ,");		// get next token
+	}
+	uint32_t dword = ENDIAN(*(uint32_t*) &syn);
+
+	if (valid < count) {
+		printf("%x\n", immediate);
+	} else {
+
+	}
+	//free(s);
+	return 1;
+}
 
 int main(int argc, char* argv[]) {
 	if (argc < 2)
 		return -1;
 	char* fname = argv[1];
-
+	buffer = malloc(1024);
 	int fp = open(fname, O_RDWR, 0444);
 	assert(fp);
 
@@ -74,8 +159,8 @@ int main(int argc, char* argv[]) {
 	char** lines = malloc(sz);
 
 	pread(fp, buffer, sz, 0);
-	printf("%s %d\n", fname, sz);
-//	puts(buffer);
+	printf("lass: %s %d bytes\n", fname, sz);
+
 
 	*lines = buffer;
 	uint32_t start = lines;
@@ -89,20 +174,15 @@ int main(int argc, char* argv[]) {
 	for(lines = start; *lines; lines++) {
 		if (**lines != ';')	{	// Remove comment-only lines
 			if (strchr(*lines, ':'))
-				printf("LABEL: %s\n", *(lines));
-			else if ( strchr(*lines, ','))
-				printf("COMMA: %s\n",*lines);
-			else
-				printf("OTHER: %s\n", *(lines));
+				add_symbol(*lines);
+			else if ( strchr(*lines, ',')) {
+				parse_line(*lines);
+			}
+			else 
+				parse_line(*lines);
 		}
 	}
 
-// Adding immediates: d=0 means constant is same size as reg \
-	d = 1, means sign extension \
-	s =0, 8 bit/ s=1, 32 bit \
-	REG set to 000, opcode extension for add 
-	printf("%x %x\n", OPCODE(ADD | IMM, 1, 1), MODRM(MOD_REG, EAX, EDX));
-	printf("%x %x\n", OPCODE(ADD | IMM, 1, 1), MODRM(MOD_REG, 0, EDX));
-
+	free(buffer);
 	return 1;
 }
