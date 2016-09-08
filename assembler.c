@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <assert.h>
 #include "encoding.h"
+#include "opcodes.h"
 #include <ctype.h>
 
 uint32_t program_length = 0;
