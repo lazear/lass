@@ -1,10 +1,10 @@
-PROG=./asm
+PROG=./lass
 NDI=ndisasm
 
 all: compile test
 
 compile:
-	 gcc -w -std=gnu99 assembler.c -o asm
+	 gcc -w -std=gnu99 assembler.c -o $(PROG)
 
 clean:
 	rm *.o

@@ -1,12 +1,12 @@
 BITS 32
+
 main:
 mov eax, 1
-mov edx, msg
-int 80
 
-db H
-db E
-db L
-db L
-db O
-db !
+int 128
+
+cmp eax, end
+mov eax, 8
+end:
+mov eax, edx
+

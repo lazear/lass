@@ -117,17 +117,7 @@ rm: register/memory
 struct symbol {
 	char name[32];
 	uint32_t position;
-} symtab[256];
-
-char* low(char a[]) { char b[10]; for (int i = 0; i < strlen(a); i++) b[i] = tolower(a[i]); return b; }
-
-#define BUILDSYN2(a) {#a, a ## _EXT }
-#define BUILDSYN(a) {#a, a}
-
-#define GENSYN(o) \
-	BUILDSYN##o(ADD), \
-	BUILDSYN##o(ADC), \
-	BUILDSYN##o(INC)
+} symtab[256], unresolved[256];
 
 typedef struct syntax {
 	char name[10];
@@ -145,7 +135,7 @@ syntax instructions[] = {
 	{ "mov", MOV }, 
 	{ "jmp", JMP },
 	{ "cmp", CMP },
-	{ "or", OR 	},
+	{ "or", OR },
 	{ "adc", ADC },
 	{ "sbb", SBB },
 	{ "xor", XOR },
@@ -159,7 +149,7 @@ syntax instructions[] = {
 	{ "mov", MOV_IMM_EXT }, 
 	{ "jmp", JMP_EXT },
 	{ "cmp", CMP_EXT },
-	{ "or", OR_EXT 	},
+	{ "or", OR_EXT },
 	{ "adc", ADC_EXT },
 	{ "sbb", SBB_EXT },
 	{ "xor", XOR_EXT }
@@ -174,4 +164,12 @@ syntax registers[] = {
 	{ "ebp", EBP },
 	{ "esi", ESI },
 	{ "edi", EDI },
+	{ "ax", EAX },
+	{ "cx", ECX },
+	{ "dx", EDX },
+	{ "bx", EBX },
+	{ "sp", ESP },
+	{ "bp", EBP },
+	{ "si", ESI },
+	{ "di", EDI },
 };
