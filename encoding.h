@@ -172,4 +172,14 @@ syntax registers[] = {
 	{ "bp", EBP },
 	{ "si", ESI },
 	{ "di", EDI },
+}, half[] = {
+	{ "al", EAX },
+	{ "cl", ECX },
+	{ "dl", EDX },
+	{ "bl", EBX },
+	{ "ah", EAX },
+	{ "ch", ECX },
+	{ "dh", EDX },
+	{ "bh", EBX },
+
 };

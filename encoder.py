@@ -16,18 +16,32 @@ typedef struct _instruction_set {
 	int prefix;
 } isa;\n
 '''
+good = ["rel8", "rel32", "r8", "r32", "crn", "r16", "rm8", "rm16", "rm32", \
+"imm8", "imm16", "imm32", "eax", "ecx", "edx", ""]
+bad = ["xmm", "xmm/m128", "mm"]
+
+not_really_operands = [ "1", "flags", "eflags"]
+
+
+# Things that don't really have operands
+white_list = ["stos", "stosb", "stosw", "stosd", "sysenter", "sysexit", "pusha", "popa", "pushad", "popad"]
+one_args = ["lidt", "lgdt", "sidt", "sgdt", "div", "mul"]
+
 with open("opcodes.h", "w") as o:
 	o.write(c)
 	with open("opcodes.csv", "r") as f:
 		o.write("isa x86[] = {\n")
 		for line in f:
+			line = line.lower()
 			line = line.replace("r/m", "rm")
 			line = line.replace("16/32", "32")
 			line = line.split(',')
-
+			line = ["" if x in not_really_operands else x for x in line]
+			#print(line)
 			name = line[0]		# instruction name
 			op1 = line[1]		# operand 1 type
 			op2 = line[2]		# operand 2 type
+			#print(line[3])
 			pf = line[6]		# extraordinary prefix
 			of = line[7]		# dedicated 0Fh prefix
 			code = line[8]		# preimary opcode
@@ -45,5 +59,19 @@ with open("opcodes.h", "w") as o:
 					ext= '0x0'
 				pf = pf if pf else "0"
 				of = of if of else "0"
-				o.write("\t{\"" + name.lower() + "\", \"" + op1.lower() + "\", \"" + op2.lower() + "\", 0x" + code + ", " + ext + ", 0x" + pf + ", 0x" + of + "},\n")
+
+				if name in one_args:
+					op1 = "rm32"
+					op2 = ""
+				if name in white_list:
+					op1 = ""
+					op2 = ""
+				if "rm" in op1 and "r" in op2:
+					continue
+				if op1 in good and op2 in good:
+					o.write("\t{\"" + name.lower() + "\", \"" + op1.lower() + "\", \"" + op2.lower() + "\", 0x" + code + ", " + ext + ", 0x" + pf + ", 0x" + of + "},\n")
+				elif op1 not in bad and op2 not in bad:
+					print("\t{\"" + name.lower() + "\", \"" + op1.lower() + "\", \"" + op2.lower() + "\", 0x" + code + ", " + ext + ", 0x" + pf + ", 0x" + of + "}")
+
+
 	o.write("};\n#endif")
