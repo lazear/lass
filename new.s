@@ -6,8 +6,7 @@ mov edx, 0xFF
 add edx, eax
 int 128
 
-cmp eax, end
+cmp eax, edx
 mov eax, 8
-end:
-mov eax, [edx + ebp]
+
 

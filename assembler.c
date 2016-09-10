@@ -157,9 +157,9 @@ int parse_line(char* line) {
 	char* pch = strtok(line, " ,");		// split line by spaces and commas
 	char* inst;							// store instruction
 
-	uint64_t syn[3] = { 0, 0, 0};
+	uint64_t syn[2] = { 0, 0};
 	int count = 0;
-	int immediate, jmp_to = -1;
+	int immediate = 0;
 	int mode = MOD_REG;		// default to MOD 11b
 
 
@@ -184,16 +184,21 @@ int parse_line(char* line) {
 
 		if (count == 0) {
 			inst = strdup(pch);
-			syn[count] = 0;
 		}
 		else {
-			syn[count] = classify(pch);
+			int n = classify(pch);
+			syn[count - 1] = n;
+			if (n & (imm8 | imm32))
+				immediate = lass_atoi(pch);
 		}
 		count++;
 		pch = strtok(NULL, " ,");		// get next token
 	}
-	printf("%s %x %x\n", inst, syn[1], syn[2]);
-	find_instruction(inst, syn[1], syn[2]);
+//	printf("%s %x %x\n", inst, syn[0], syn[1]);
+	isa* instruction = find_instruction(inst, syn[0], syn[1]);
+	if (instruction)
+		write_word(MODRM(mode, syn[0] &= ~(r32 | r8), syn[1]&= ~(r32 | r8)) << 8 | instruction->primary);
+//	printf("%x%x\n", instruction->primary, MODRM(mode, syn[0] &= ~(r32 | r8), syn[1]&= ~(r32 | r8)));
 	free(displacement);
 
 
