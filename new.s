@@ -2,11 +2,13 @@ BITS 32
 
 main:
 mov eax, 1
-mov edx, 0xFF
+mov edx, 0x10
 add edx, eax
-int 128
+and ecx, edx
+mov al, cl
+int 0x80 
+iret
+end:
 
-cmp eax, edx
-mov eax, 8
-
-
+test eax, ebx
+cmp edx, ecx

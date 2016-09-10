@@ -110,16 +110,16 @@ long long lass_atoi(char* s) {
 #define rel8 	0x200
 #define rel32 	0x400
 
-
 isa* find_instruction(char* s, int op1, int op2) {
+	printf("%s %x %x\n", s, op1, op2);
 	for (int i = 0; i < sizeof(x86)/sizeof(isa); i++) {
 		if (strcmp(x86[i].name, s) == 0) {
-			if ((x86[i].op1 & op1) && ((x86[i].op2 && op2) || (x86[i].op2 == none))) {
-				printf("found %s 0x%x\n", s, x86[i].primary);
+			if ((x86[i].op1 & op1) && ((x86[i].op2 & ( (op2 & imm8) ? 0xC0 : op2)) || (x86[i].op2 == none))) {
+				//printf("found %s 0x%x\n", s, x86[i].primary);
 				return &x86[i];
 			}
 			if ((x86[i].op1 == none) && (x86[i].op2 == none)) {
-				printf("found %s 0x%x\n", s, x86[i].primary);
+				//printf("found %s 0x%x\n", s, x86[i].primary);
 				return &x86[i];
 			}
 		}
@@ -146,7 +146,7 @@ int classify(char* s) {
 }
 
 int parse_line(char* line) {
-	//printf("%08x %-20s\n",current_position, line);	
+	printf("%08x %-20s\n",current_position, line);	
 
 	char* displacement = NULL;
 	char* disp = strpbrk(line, "[");
@@ -158,8 +158,10 @@ int parse_line(char* line) {
 	char* inst;							// store instruction
 
 	uint64_t syn[2] = { 0, 0};
-	int count = 0;
-	int immediate = 0;
+	int count 		= 0;	// number of items in line
+	int opno		= 0;	// number of register operands
+	int immediate 	= 0;	// store value of immediates
+	int imm = 0;
 	int mode = MOD_REG;		// default to MOD 11b
 
 
@@ -180,26 +182,69 @@ int parse_line(char* line) {
 			classify(displacement);
 			break;
 		}
-		printf("\t%s\n", pch);
+		//printf("\t%s\n", pch);
 
 		if (count == 0) {
 			inst = strdup(pch);
 		}
 		else {
 			int n = classify(pch);
-			syn[count - 1] = n;
-			if (n & (imm8 | imm32))
+
+			if (n & (imm8 | imm32)) {
+				imm = 1;
 				immediate = lass_atoi(pch);
+				//printf("Immediate value: %x\n", immediate);
+			} 
+			if (n == -1) {	// label maybe?
+				immediate = find_symbol(pch);
+				imm = 1;
+				//printf("Symbol? %s: 0x%x\n", pch, immediate);
+				n = rel8|rel32;
+			}
+			syn[count - 1] = n;
 		}
 		count++;
 		pch = strtok(NULL, " ,");		// get next token
 	}
-//	printf("%s %x %x\n", inst, syn[0], syn[1]);
-	isa* instruction = find_instruction(inst, syn[0], syn[1]);
-	if (instruction)
-		write_word(MODRM(mode, syn[0] &= ~(r32 | r8), syn[1]&= ~(r32 | r8)) << 8 | instruction->primary);
-//	printf("%x%x\n", instruction->primary, MODRM(mode, syn[0] &= ~(r32 | r8), syn[1]&= ~(r32 | r8)));
-	free(displacement);
+
+		isa* instruction = find_instruction(inst, syn[0], syn[1]);
+
+		if (instruction) {
+			int m = 0;
+			int o = instruction->primary;
+
+			if (syn[1]) {
+				if ((syn[0] & (r32 | r8)) && (syn[1]  & (r32 | r8))) {
+					m = MODRM(mode, syn[0] &= ~(r32 | r8), syn[1] &= ~(r32 | r8));
+				} else if ((syn[0] & (r32 | r8)) && (syn[1] & (imm8 | imm32 | rel8 | rel32))) {
+					m = MODRM(mode, instruction->extension, syn[0] &= ~(r32 | r8));
+				}
+				if ((syn[0] & (imm8 | imm32 | rel8 | rel32))) {
+					m = MODRM(mode, instruction->extension, 0);
+				}
+		
+				write_word(m << 8 | o);
+			} else {
+				write_byte(instruction->primary);
+			}
+
+
+			if (imm) {
+				int sw = (instruction->op2 == none) ? instruction->op1 : instruction->op2;
+				switch(sw) {
+					case imm8: case rel8:
+						write_byte(immediate & 0xFF);
+						break;
+					case imm32: case rel32:
+						write_dword(immediate);
+						break;
+					}
+			}
+		} else {
+			printf("instruction: %s not recognized?\n", inst);
+		}
+	
+
 
 
 }
@@ -358,7 +403,9 @@ int main(int argc, char* argv[]) {
 	for (int i = 0; i < sz; i++) {
 		if (buffer[i] == '\n') {
 			buffer[i] = '\0';
-			*(lines++) = (uint32_t) buffer + i + 1;
+			char* new = (uint32_t) buffer + i + 1;
+			if (*new)
+				*(lines++) = new;
 		}
 	}
 

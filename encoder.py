@@ -27,7 +27,7 @@ not_really_operands = [ "1", "flags", "eflags"]
 white_list = ["stos", "stosb", "stosw", "stosd", "sysenter", "sysexit", "pusha", "popa", "pushad", "popad"]
 one_args = ["lidt", "lgdt", "sidt", "sgdt", "div", "mul"]
 
-with open("opcodes.h", "w") as o:
+with open("opcodes2.h", "w") as o:
 	o.write(c)
 	with open("opcodes.csv", "r") as f:
 		o.write("isa x86[] = {\n")
