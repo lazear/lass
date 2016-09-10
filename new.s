@@ -10,5 +10,6 @@ int 0x80
 iret
 end:
 
-test eax, ebx
+test eax, end
+jne end
 cmp edx, ecx

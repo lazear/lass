@@ -8,16 +8,32 @@ c = \
 
 typedef struct _instruction_set {
 	char name[10];
-	char op1[10];
-	char op2[10];
+	int op1;
+	int op2;
 	int primary;
 	int extension;
 	int secondary;
 	int prefix;
-} isa;\n
+} isa;
+
+#define none	0
+#define r32 	0x10
+#define rm32 	r32
+#define r8 		0x20
+#define rm8		r8
+#define imm8 	0x40
+#define imm32	0x80
+#define crn 	0x100
+#define rel8 	0x200
+#define rel32 	0x400
+#define eax 	0x800
+#define edx 	0x802
+#define ecx		0x801
+#define ebx		0x803
+
 '''
 good = ["rel8", "rel32", "r8", "r32", "crn", "r16", "rm8", "rm16", "rm32", \
-"imm8", "imm16", "imm32", "eax", "ecx", "edx", ""]
+"imm8", "imm16", "imm32", "eax", "ecx", "edx", "none", ""]
 bad = ["xmm", "xmm/m128", "mm"]
 
 not_really_operands = [ "1", "flags", "eflags"]
@@ -27,14 +43,16 @@ not_really_operands = [ "1", "flags", "eflags"]
 white_list = ["stos", "stosb", "stosw", "stosd", "sysenter", "sysexit", "pusha", "popa", "pushad", "popad"]
 one_args = ["lidt", "lgdt", "sidt", "sgdt", "div", "mul"]
 
-with open("opcodes2.h", "w") as o:
+with open("opcodes.h", "w") as o:
 	o.write(c)
 	with open("opcodes.csv", "r") as f:
 		o.write("isa x86[] = {\n")
+		last = []
 		for line in f:
 			line = line.lower()
 			line = line.replace("r/m", "rm")
 			line = line.replace("16/32", "32")
+			line = line.replace("16", "32")
 			line = line.split(',')
 			line = ["" if x in not_really_operands else x for x in line]
 			#print(line)
@@ -49,29 +67,40 @@ with open("opcodes2.h", "w") as o:
 			if code and code != "po":
 				if "+r" in code:
 					op2 = op2 if op2 else "X"
+					ext = "DEAD"
 					code = code.split("+")[0]
 				if ext:
 					if ext == 'r':
-						ext = '0xFF'
+						ext = '0x00'
 					else:
 						ext = '0x' + ext
 				else:
 					ext= '0x0'
+		
 				pf = pf if pf else "0"
 				of = of if of else "0"
 
 				if name in one_args:
 					op1 = "rm32"
-					op2 = ""
+					op2 = "none"
 				if name in white_list:
-					op1 = ""
-					op2 = ""
-				if "rm" in op1 and "r" in op2:
+					op1 = "none"
+					op2 = "none"
+				op1 = "none" if op1 == "" else op1
+				op2 = "none" if op2 == "" else op2
+
+				if "rm" in op1 and "r" in op2 and name != "test":
 					continue
 				if op1 in good and op2 in good:
-					o.write("\t{\"" + name.lower() + "\", \"" + op1.lower() + "\", \"" + op2.lower() + "\", 0x" + code + ", " + ext + ", 0x" + pf + ", 0x" + of + "},\n")
-				elif op1 not in bad and op2 not in bad:
-					print("\t{\"" + name.lower() + "\", \"" + op1.lower() + "\", \"" + op2.lower() + "\", 0x" + code + ", " + ext + ", 0x" + pf + ", 0x" + of + "}")
+					o.write("\t{\"" + name.lower() + "\", " + op1.lower() + ", " + op2.lower() + ", 0x" + code + ", " + ext + ", 0x" + pf + ", 0x" + of + "},\n")
+					last = [name.lower(), op1, op2, code, ext, pf, of]
 
+				elif op1 not in bad and op2 not in bad:
+					print("\t{\"" + name.lower() + "\", " + op1.lower() + ", " + op2.lower() + ", 0x" + code + ", " + ext + ", 0x" + pf + ", 0x" + of + "}")
+			else:
+				if last:
+					last[0] = name
+					o.write("\t{\"" + last[0] + "\", " + last[1]  + ", " + last[2]  + ", 0x" + last[3]  + ", " + last[4]  + ", 0x" + last[5]  + ", 0x" + last[6]  + "},\n")
+					
 
 	o.write("};\n#endif")

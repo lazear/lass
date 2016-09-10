@@ -111,7 +111,6 @@ long long lass_atoi(char* s) {
 #define rel32 	0x400
 
 isa* find_instruction(char* s, int op1, int op2) {
-	printf("%s %x %x\n", s, op1, op2);
 	for (int i = 0; i < sizeof(x86)/sizeof(isa); i++) {
 		if (strcmp(x86[i].name, s) == 0) {
 			if ((x86[i].op1 & op1) && ((x86[i].op2 & ( (op2 & imm8) ? 0xC0 : op2)) || (x86[i].op2 == none))) {
@@ -146,7 +145,7 @@ int classify(char* s) {
 }
 
 int parse_line(char* line) {
-	printf("%08x %-20s\n",current_position, line);	
+	printf("%08x %-20s",current_position, line);	
 
 	char* displacement = NULL;
 	char* disp = strpbrk(line, "[");
@@ -199,7 +198,7 @@ int parse_line(char* line) {
 				immediate = find_symbol(pch);
 				imm = 1;
 				//printf("Symbol? %s: 0x%x\n", pch, immediate);
-				n = rel8|rel32;
+				n = rel8|rel32 | imm8 | imm32;
 			}
 			syn[count - 1] = n;
 		}
@@ -218,14 +217,22 @@ int parse_line(char* line) {
 					m = MODRM(mode, syn[0] &= ~(r32 | r8), syn[1] &= ~(r32 | r8));
 				} else if ((syn[0] & (r32 | r8)) && (syn[1] & (imm8 | imm32 | rel8 | rel32))) {
 					m = MODRM(mode, instruction->extension, syn[0] &= ~(r32 | r8));
+
 				}
 				if ((syn[0] & (imm8 | imm32 | rel8 | rel32))) {
 					m = MODRM(mode, instruction->extension, 0);
 				}
-		
-				write_word(m << 8 | o);
+				if (instruction->extension == 0xDEAD) {
+					printf("EXTENSION\n");
+					write_byte( (o & ~0x7 | syn[0] & ~(r32|r8)));
+				}
+				else
+					write_word(m << 8 | o);
+
+				printf("\t%x%x\n", o << 8 | m);
 			} else {
-				write_byte(instruction->primary);
+				write_byte(o);
+				printf("\t%x\n", o);
 			}
 
 
