@@ -1,4 +1,4 @@
 #!/bin/bash
 make
 ./lass new.s
-ndisasm output
+ndisasm -b 32 output

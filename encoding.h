@@ -9,12 +9,12 @@
 #define ESI 6
 #define EDI 7
 #define sreg	0x1000
-#define ss 		sreg | 2
-#define cs 		sreg | 1
-#define ds 		sreg | 3
-#define es 		sreg | 0
-#define fs 		sreg | 4
-#define gs 		sreg | 5
+#define ss 		2
+#define cs 		1
+#define ds 		3
+#define es 		0
+#define fs 		4
+#define gs 		5
 
 /*
 Zero: [eax]

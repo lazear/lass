@@ -11,8 +11,7 @@ uint32_t program_length = 0;
 uint32_t current_position = 0;
 uint32_t num_symbols = 0;
 uint32_t unr_symbols = 0;
-uint8_t output[1024];
-
+uint8_t* output;
 
 int add_symbol(char* label) {
 //	printf("add symbol: %s @ 0x%x\n", label, current_position);
@@ -20,28 +19,26 @@ int add_symbol(char* label) {
 	for (int i = 0; i < 32 && i < strlen(label); i++) {
 		symtab[num_symbols].name[i] = label[i];
 	}
-	symtab[num_symbols].position = current_position;
+	for (int i = 0; i < unr_symbols; i++) {
+		if (strncmp(label, unresolved[i].name, strlen(unresolved[i].name)) == 0) {
+			/* Added a previously unresolved symbol, so we need to go back and 
+			replace the dummy value with the real label position */
+			int dummy = unresolved[i].position;
+			for (int i = dummy; i < dummy + 4; i+=2) {
+				uint16_t word = (output[i+1] << 8 | output[i]);
+				if (word == dummy) {
+					output[i] = current_position & 0xFF;
+					output[i+1] = (current_position >> 8)& 0xFF;
+				}
+			}
+		}
+	}
 
-	// for (int i = 0; i < unr_symbols; i++) {
-	// 	if (strncmp(label, unresolved[i].name, strlen(unresolved[i].name)) == 0) {
-	// 		/* Added a previously unresolved symbol, so we need to go back and 
-	// 		replace the dummy value with the real label position */
-	// 		int dummy = unresolved[i].position;
-	// 		for (int i = dummy; i < dummy + 4; i+=2) {
-	// 			uint16_t word = (output[i+1] << 8 | output[i]);
-	// 			if (word == dummy) {
-	// 				output[i] = current_position & 0xFF;
-	// 				output[i+1] = (current_position >> 8)& 0xFF;
-	// 			}
-	// 		}
-	// 	}
-	// }
-	num_symbols++;
+	symtab[num_symbols++].position = current_position;
 }
 
 
 int find_symbol(char* label) {
-
 	for (int i = 0; i < num_symbols; i++)
 		if (strcmp(symtab[i].name, label) == 0)
 			return symtab[i].position;
@@ -50,14 +47,11 @@ int find_symbol(char* label) {
 	if (strcmp(label, "$") == 0)
 		return current_position;
 
-	/* At this point, the symbol is unresolved, so we add it to the unresolved
-	symbol table. We're going to handle this by */
-	// unresolved[unr_symbols].position = current_position;
-	printf("unres sym %s @ 0x%x \n", label, current_position);
-	// for (int i = 0; i < 32 && i < strlen(label); i++)
-	// 		unresolved[unr_symbols].name[i]  = label[i];
-	// unr_symbols++;
-
+	unresolved[unr_symbols].position = current_position;
+	//printf("unres sym %s @ 0x%x \n", label, current_position);
+	for (int i = 0; i < 32 && i < strlen(label); i++)
+			unresolved[unr_symbols].name[i]  = label[i];
+	unr_symbols++;
 	return current_position;
 }
 
@@ -76,6 +70,13 @@ void write_dword(uint32_t x) {
 	output[current_position++] = (x >> 8)& 0xFF;
 	output[current_position++] = (x >> 16)& 0xFF;
 	output[current_position++] = (x >> 24)& 0xFF;
+}
+
+int log2(int s) {
+	int i = 0;
+	while (s /= 2)
+		i++;
+	return i;
 }
 
 long long lass_atoi(char* s) {
@@ -104,10 +105,15 @@ long long lass_atoi(char* s) {
 isa* find_instruction(char* s, int op1, int op2) {
 	for (int i = 0; i < sizeof(x86)/sizeof(isa); i++) {
 		if (strcmp(x86[i].name, s) == 0) {
-			if ( ((x86[i].op1 & op1) == x86[i].op1) && ((x86[i].op2 == op2) || (x86[i].op2 == none))) 
-				return &x86[i];
-			if ((x86[i].op1 == none) && (x86[i].op2 == none)) 
-				return &x86[i];
+			if (op1 & sreg) {
+				if (( x86[i].op1 == op1) && ((x86[i].op2 == op2) || (x86[i].op2 == none))) 
+					return &x86[i];
+			} else {
+				if (((x86[i].op1 & op1) == x86[i].op1) && ((x86[i].op2 == op2) || (x86[i].op2 == none))) 
+					return &x86[i];
+				if ((x86[i].op1 == none) && (x86[i].op2 == none)) 
+					return &x86[i];
+			}
 		}
 	}
 	/* Second loop - if we have an imm8 or rel8, but there is no designated
@@ -136,8 +142,10 @@ int classify(char* s) {
 		if (strcmp(half[i].name, s) == 0)
 			return half[i].code | r8;
 	for (int i = 0; i < sizeof(segments)/sizeof(syntax); i++)
-		if (strcmp(segments[i].name, s) == 0)
+		if (strcmp(segments[i].name, s) == 0) {
+			printf("SEGMENT: %s %d\n", s, segments[i].code);
 			return segments[i].code | sreg;
+		}
 
 	return -1;
 }
@@ -150,36 +158,42 @@ typedef struct __instruction_s {
 	int disp;
 } instruction_s;
 
+
+
 instruction_s* calc_sib(char* line, int op1) {
 	int scale 	= -1;
 	int index 	= -1;
 	int base 	= -1;
 	char* plus 	= strchr(line, '+');
+	char* minus = strchr(line, '-');
 	char* star 	= strchr(line, '*');
 
 	int c 		= 0;
 	int disp 	= 0;
+	int mod 	= 0;
 
 	instruction_s* ret = malloc(sizeof(instruction_s));
-
+	memset(ret, 0, sizeof(instruction_s));
+	//printf("%s\n", line);
 	/* We haven't been provided the first operand by parse_line.
 	This should mean that the displacement IS the first operand:
 	mov [eax+8], ebx 	etc, etc
 	*/
 	if (op1 == 0) {
 		char* op = strchr(line, ',');
-		while(*op != 'e')
-			op++;
-		op1 = classify(op);
+		if (op != NULL) {
+			while(*op != 'e')
+				op++;
+			op1 = classify(op);
+		}
 	}
 
 	/* No multiplication symbol, so we assume that no SIB byte is required */
 	if (star == NULL) {
 		scale = 0;
 
-		char* pch = strtok(line, " [+],");
+		char* pch = strtok(line, " [+-],");
 		while(pch) {
-	
 			if (isdigit(*pch)) {
 				disp = lass_atoi(pch);
 			} else {
@@ -189,10 +203,11 @@ instruction_s* calc_sib(char* line, int op1) {
 					base = classify(pch);
 				c++;
 			}
-			pch = strtok(NULL, " [+],*");
+			pch = strtok(NULL, " [+-],*");
 		}
 
 		if (disp) {
+			disp *= (minus) ? -1 : 1;
 			if (disp > UCHAR_MAX)
 				ret->modrm = MODRM(MOD_FOUR, (op1 & ~(r8|r32)), index);
 			else 
@@ -200,17 +215,16 @@ instruction_s* calc_sib(char* line, int op1) {
 			ret->disp = disp;
 		} else {
 			ret->modrm = MODRM((index == EBP) ? MOD_ONE : MOD_ZERO, (op1 & ~(r8|r32)), index);
+			ret->disp = 0;
 		}
 		return ret;
 	}
 
 	/* We need to calculate an SIB byte 
 	MOD = 00b, 01b, 10b and R/M = 100b */
-	printf("%s %d %d\n", line, plus, star);
 	char* pch = strtok(line, " [+],*");
 	int n;
 	while(pch) {
-		printf("%s\n", pch);
 		if (isdigit(*pch)) {
 			n = lass_atoi(pch);
 
@@ -220,33 +234,48 @@ instruction_s* calc_sib(char* line, int op1) {
 			if (plus < star & pch > plus) {
 				scale = n;
 			}
-
 		} else {
 			if (c == 0)
-				index = classify(pch) & ~(rm32|rm8);
+				index = classify(pch);
 			if (c == 1)
 				base = classify(pch);
 			c++;
 		}
-		printf("%d %d %d %d\n", scale, index, base, disp);
 		
 		pch = strtok(NULL, " [+],*");
 	}
+
 	/* R/M bits equals 4 always. Mod is determined by SIB addressing mode:
 		00 = [reg32 + eax*n]
 		01 = [disp + reg8 + eax*n]
 		10 = [disp + reg32 + eax*n]
 		00 = [disp + eax*n], base field = 101
 	*/
-	ret->modrm = MODRM(1, op1, 4);
+	if (index && base) {
+		if (index & r32) 
+			mod = 2;
+		else 
+			mod = 1;
+		index &= ~(r8 | r32);
+		base &= ~(r8|r32);
+	}
+	if (base == -1) {
+		base = 5;
+		mod = 0;
+	}
+
+	scale = log2(scale);
+
+	ret->modrm = MODRM(mod, op1, 4);
 	ret->sib = MODRM(scale, index, base);
 	ret->disp = disp;
-	printf("%x %x %x\n", ret->modrm, ret->sib, ret->disp);
+	printf("\nScale: %x Index: %x Base: %x disp: %x\n", scale, index, base, disp);
+	//printf("%x %x %x\n", ret->modrm, ret->sib, ret->disp);
 	return ret;
 }
 
-int parse_line(char* line) {
-	printf("%08x %-20s",current_position, line);	
+int parse_line(char* line, int pass_no) {
+	if (pass_no > 1) printf("%08x %-20s\n",current_position, line);	
 
 	char* displacement = NULL;
 	char* disp = strpbrk(line, "[");
@@ -254,7 +283,7 @@ int parse_line(char* line) {
 	if (disp)
 		displacement = strdup(disp);
 
-	char* pch = strtok(line, " ,");		// split line by spaces and commas
+	char* pch = strtok(line, " ,\t");		// split line by spaces and commas
 	char* inst;							// store instruction
 
 	uint64_t syn[2] = { 0, 0};
@@ -264,27 +293,56 @@ int parse_line(char* line) {
 	int mode = MOD_REG;		// default to MOD 11b
 	int m = -1;
 	int rev = 0;
-
-	instruction_s* x = malloc(sizeof(instruction_s));
+	int sib = 0;
 
 
 	if (!strcmp(pch, "db")) {
-
-		char* pch = strtok(NULL, " ");
-		char b = *pch;
-		b = (isdigit(b) == 1) ? lass_atoi(b) : b;
-		//printf("db: %d val\n", b);
-		output[current_position++] = b;
+		char* pch = strtok(NULL, ", '\"");
+		while(pch) {
+			if (isdigit(*pch)) {
+				immediate = lass_atoi(pch);
+				write_byte(immediate);
+			}
+			else
+				while(*pch) {
+					write_byte(*pch++);
+				}
+			pch =  strtok(NULL, ", '\"");
+		}
+		return;
+	}
+	if (!strcmp(pch, "dw")) {
+		char* pch = strtok(NULL, ", '\"");
+		while(pch) {
+			if (isdigit(*pch)) {
+				immediate = lass_atoi(pch);
+				write_word(immediate);
+			}
+			pch =  strtok(NULL, ", '\"");
+		}
+		return;
+	}
+	if (!strcmp(pch, "dd")) {
+		char* pch = strtok(NULL, ", '\"");
+		while(pch) {
+			if (isdigit(*pch)) {
+				immediate = lass_atoi(pch);
+				write_dword(immediate);
+			}
+			pch =  strtok(NULL, ", '\"");
+		}
 		return;
 	}
 
-	while(pch) {
+	while(pch && *pch != ';') {
 		if (pch == disp && disp) {
 			// Do something
 			instruction_s* a = calc_sib(displacement, syn[0]);
 			m = a->modrm;
-			mode = (m >> 6);
+			sib = a->sib;
 			immediate = a->disp;
+			mode = (m >> 6);
+			//imm = (immediate != 0);
 			imm = 1;
 
 			syn[1] |= (r32);
@@ -308,7 +366,7 @@ int parse_line(char* line) {
 				immediate = lass_atoi(pch);
 				//printf("Immediate value: %x\n", immediate);
 			} 
-			if (n == -1) {	// label maybe?
+			else if (n == -1) {	// label maybe?
 				immediate = find_symbol(pch);
 				imm = 1;
 				//printf("Symbol? %s: 0x%x\n", pch, immediate);
@@ -317,7 +375,7 @@ int parse_line(char* line) {
 			syn[count - 1] = n;
 		}
 		count++;
-		pch = strtok(NULL, " ,");		// get next token
+		pch = strtok(NULL, " ,\t");		// get next token
 	}
 
 	isa* instruction = find_instruction(inst, syn[0], syn[1]);
@@ -352,13 +410,13 @@ int parse_line(char* line) {
 			else
 				write_word(m << 8 | o);
 
-			printf("\t%x%x\n", o << 8 | m);
+			//if (pass_no > 1) printf("\t%x%x\n", o << 8 | m);
 
 		} else {	// One operand?
 
-			if (instruction->extension == 0xDEAD) {
+			if (instruction->extension == 0xDEAD && m == -1) {
 			//	printf("EXTENSION\n");
-				write_byte( (o & ~0x7 | syn[0] & ~(r32|r8)));
+				write_byte( (o & ~0x7 | syn[0] & ~(r32|r8 |sreg)));
 			} else {
 				if (!syn[0])
 					write_byte(o);
@@ -366,13 +424,18 @@ int parse_line(char* line) {
 				else if (syn[0] & 0x6C0 || (syn[0] & sreg))
 					write_byte(o);
 				else if (syn[0] != none) {
-					m = (m == -1) ? MODRM(mode, instruction->extension, syn[0] &= ~(r32 | r8)) : m;
+					m = (m == -1) ? MODRM(mode, instruction->extension, syn[0] & ~(r32 | r8 | sreg)) : m;
 					write_word(m << 8 | o);
-					printf("%x", MODRM(mode, instruction->extension, syn[0] &= ~(r32 | r8)) << 8 | o);
+				//	if (pass_no > 1) printf("%x", MODRM(mode, instruction->extension, syn[0] &= ~(r32 | r8)) << 8 | o);
 				}
 
 			}
-			printf("\t%x\n", o);
+			//if (pass_no > 1) printf("\t%x\n", o);
+		}
+
+		/* If there's an SIB byte, write it now */
+		if (sib) {
+			write_byte(sib);
 		}
 
 		if (imm) {
@@ -393,13 +456,43 @@ int parse_line(char* line) {
 				default:	// SIB/Displacement 
 					if (mode == 1)
 						write_byte(immediate);
-					if (mode == 2)
+					else
 						write_dword(immediate);
 				}
 		}
 	} else {
 		printf("instruction: %s not recognized?\n", inst);
 	}
+}
+
+void pass(char* buffer, int sz, int pass_no) {
+	char** lines = malloc(sz);
+
+	*lines = buffer;
+	uint32_t start = lines;
+
+	for (int i = 0; i < sz; i++) {
+		if (buffer[i] == '\n') {
+			buffer[i] = '\0';
+			char* new = (uint32_t) buffer + i + 1;
+			if (*new) 
+				*(lines++) = new;
+		}
+	}
+
+	for(lines = start; *lines; lines++) {
+		if (**lines != ';' && **lines)	{	// Remove comment-only lines
+			if (strchr(*lines, ':')) {
+				char* c = strchr(*lines, ':');
+				*c = '\0';					// remove the semi colon
+				add_symbol(*lines);
+			}
+			else 
+				parse_line(*lines, pass_no);
+		}
+	}
+
+	free(start);
 }
 
 
@@ -421,44 +514,24 @@ int main(int argc, char* argv[]) {
 	lseek(fp, 0, SEEK_SET);		// back to beginning
 
 	char* buffer = malloc(sz);	// File buffer
-	char** lines = malloc(sz);
-
+	output = malloc(sz);
 	pread(fp, buffer, sz, 0);
 	printf("lass: read %d bytes from %s\n", sz, fname);
 
+	// First pass
+	pass(buffer, sz, 1);
+	//Second pass
+	current_position = 0;
+	pread(fp, buffer, sz, 0);
 
-	*lines = buffer;
-	uint32_t start = lines;
-	uint16_t cnt = 0;
-	for (int i = 0; i < sz; i++) {
-		if (buffer[i] == '\n') {
-			buffer[i] = '\0';
-			char* new = (uint32_t) buffer + i + 1;
-			if (*new) {
-				*(lines++) = new;
-				cnt++;
-			}
-		}
-	}
+	pass(buffer, sz, 2);
 
-	for(lines = start; *lines; lines++) {
-		if (**lines != ';' && **lines)	{	// Remove comment-only lines
-			if (strchr(*lines, ':')) {
-				char* c = strchr(*lines, ':');
-				*c = '\0';					// remove the semi colon
-				add_symbol(*lines);
-			}
-			else 
-				parse_line(*lines);
-		}
-	}
 
 	FILE* fd = fopen("output", "wb");
 	assert(fd);
 	fwrite(output, 1, current_position, fd);
 	fflush(fd);
 	free(buffer);
-	free(start);
 	printf("Wrote %d bytes to %s\n", current_position, "output" );
 
 	printf("%x\n", MODRM(2, 0, 4));
