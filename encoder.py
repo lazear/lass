@@ -26,14 +26,22 @@ typedef struct _instruction_set {
 #define crn 	0x100
 #define rel8 	0x200
 #define rel32 	0x400
-#define eax 	0x800
-#define edx 	0x802
-#define ecx		0x801
-#define ebx		0x803
+#define eax 	r32 | EAX | 0x800 	// So this value doesn't get used
+#define edx 	r32 | EDX
+#define ecx		r32 | ECX
+#define ebx		r32 | EBX
+#define sreg	0x1000
+#define ss 		sreg | 2
+#define cs 		sreg | 1
+#define ds 		sreg | 3
+#define es 		sreg | 0
+#define fs 		sreg | 4
+#define gs 		sreg | 5
 
 '''
-good = ["rel8", "rel32", "r8", "r32", "crn", "r16", "rm8", "rm16", "rm32", \
-"imm8", "imm16", "imm32", "eax", "ecx", "edx", "none", ""]
+good = ["sreg", "rel8", "rel32", "r8", "r32", "crn", "r16", "rm8", "rm16", "rm32", \
+"imm8", "imm16", "imm32", "eax", "ecx", "edx", "none", "", "ds", "es", "fs", \
+"gs", "cs", "ss"]
 bad = ["xmm", "xmm/m128", "mm"]
 
 not_really_operands = [ "1", "flags", "eflags"]
@@ -66,16 +74,16 @@ with open("opcodes.h", "w") as o:
 			ext = line[10]
 			if code and code != "po":
 				if "+r" in code:
-					op2 = op2 if op2 else "X"
+					op2 = op2 if op2 else "none"
 					ext = "DEAD"
 					code = code.split("+")[0]
 				if ext:
 					if ext == 'r':
-						ext = '0x00'
+						ext = "0x0"
 					else:
 						ext = '0x' + ext
 				else:
-					ext= '0x0'
+					ext= "0x0"
 		
 				pf = pf if pf else "0"
 				of = of if of else "0"

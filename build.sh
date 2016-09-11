@@ -1,4 +1,4 @@
 #!/bin/bash
 make
-./asm new.s
+./lass new.s
 ndisasm output
