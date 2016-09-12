@@ -143,7 +143,6 @@ int classify(char* s) {
 			return half[i].code | r8;
 	for (int i = 0; i < sizeof(segments)/sizeof(syntax); i++)
 		if (strcmp(segments[i].name, s) == 0) {
-			printf("SEGMENT: %s %d\n", s, segments[i].code);
 			return segments[i].code | sreg;
 		}
 
@@ -269,7 +268,7 @@ instruction_s* calc_sib(char* line, int op1) {
 	ret->modrm = MODRM(mod, op1, 4);
 	ret->sib = MODRM(scale, index, base);
 	ret->disp = disp;
-	printf("\nScale: %x Index: %x Base: %x disp: %x\n", scale, index, base, disp);
+	//printf("\nScale: %x Index: %x Base: %x disp: %x\n", scale, index, base, disp);
 	//printf("%x %x %x\n", ret->modrm, ret->sib, ret->disp);
 	return ret;
 }
@@ -342,6 +341,7 @@ int parse_line(char* line, int pass_no) {
 			sib = a->sib;
 			immediate = a->disp;
 			mode = (m >> 6);
+	
 			//imm = (immediate != 0);
 			imm = 1;
 
@@ -366,7 +366,7 @@ int parse_line(char* line, int pass_no) {
 				immediate = lass_atoi(pch);
 				//printf("Immediate value: %x\n", immediate);
 			} 
-			else if (n == -1) {	// label maybe?
+			if (n == -1) {	// label maybe?
 				immediate = find_symbol(pch);
 				imm = 1;
 				//printf("Symbol? %s: 0x%x\n", pch, immediate);
@@ -516,11 +516,14 @@ int main(int argc, char* argv[]) {
 	char* buffer = malloc(sz);	// File buffer
 	output = malloc(sz);
 	pread(fp, buffer, sz, 0);
-	printf("lass: read %d bytes from %s\n", sz, fname);
+
 
 	// First pass
+	printf("lass: read %d bytes from %s\n", sz, fname);
+	printf("First pass, finding labels:\n");
 	pass(buffer, sz, 1);
 	//Second pass
+	
 	current_position = 0;
 	pread(fp, buffer, sz, 0);
 
@@ -534,6 +537,5 @@ int main(int argc, char* argv[]) {
 	free(buffer);
 	printf("Wrote %d bytes to %s\n", current_position, "output" );
 
-	printf("%x\n", MODRM(2, 0, 4));
 	return 0;
 }
