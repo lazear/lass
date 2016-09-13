@@ -11,4 +11,4 @@ clean:
 
 test:
 	$(PROG) new.s
-	$(NDI) output
+	$(NDI) -b 32 output

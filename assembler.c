@@ -181,9 +181,14 @@ instruction_s* calc_sib(char* line, int op1) {
 	if (op1 == 0) {
 		char* op = strchr(line, ',');
 		if (op != NULL) {
-			while(*op != 'e')
+			printf("%s\n", op);
+			while(*op == ' ' || *op == ',') {
+				printf("%s\n", op);
 				op++;
+			}
 			op1 = classify(op);
+			if (op1 & (imm8|imm32))
+				disp = lass_atoi(op);
 		}
 	}
 
