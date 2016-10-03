@@ -4,6 +4,7 @@
 #include <assert.h>
 #include "encoding.h"
 #include "opcodes.h"
+#include "elf.h"
 #include <ctype.h>
 #include <limits.h>
 
@@ -12,6 +13,48 @@ uint32_t current_position = 0;
 uint32_t num_symbols = 0;
 uint32_t unr_symbols = 0;
 uint8_t* output;
+uint8_t* elf_output;
+uint32_t elf_offset = 0;
+
+void make_elf() {
+	printf("Making elf header\n");
+	elf_offset = sizeof(elf32_ehdr) + sizeof(elf32_phdr);
+	elf32_ehdr* e = malloc(sizeof(elf32_ehdr));
+	e->e_ident[0] = ELF_MAGIC;
+	e->e_ident[1] = 0x00010101;
+	e->e_ident[2] = 0;
+	e->e_ident[3] = 0;
+	e->e_type = ET_EXEC;
+	e->e_machine = 3;
+	e->e_version = 1;
+	e->e_entry =elf_offset + find_symbol("main");
+	e->e_phoff = sizeof(elf32_ehdr);
+	e->e_shoff = 0;
+	e->e_flags = 0;
+	
+	e->e_ehsize = sizeof(elf32_ehdr);
+	e->e_phentsize = sizeof(elf32_phdr) * 1;
+	e->e_phnum = 1;
+	e->e_shentsize = 0;
+	e->e_shnum = 0;
+	e->e_shstrndx = 0;
+	
+	elf32_phdr* p = malloc(sizeof(elf32_phdr));
+	p->p_type = 1;
+	p->p_offset = 0;
+	p->p_vaddr = 0;
+	p->p_paddr = 0;
+	p->p_filesz = program_length +elf_offset;
+	printf("p_filesz: %d bytes\n", p->p_filesz);
+	p->p_memsz = p->p_filesz;
+	p->p_flags = 0x5;
+	p->p_align = 0x1000;
+
+	elf_output = malloc(elf_offset);
+	memcpy(elf_output, e, sizeof(elf32_ehdr));
+	memcpy(elf_output + sizeof(elf32_ehdr), p, sizeof(elf32_phdr));
+
+}
 
 int add_symbol(char* label) {
 //	printf("add symbol: %s @ 0x%x\n", label, current_position);
@@ -182,10 +225,8 @@ instruction_s* calc_sib(char* line, int op1) {
 		char* op = strchr(line, ',');
 		if (op != NULL) {
 			printf("%s\n", op);
-			while(*op == ' ' || *op == ',') {
-				printf("%s\n", op);
+			while(*op == ' ' || *op == ',')
 				op++;
-			}
 			op1 = classify(op);
 			if (op1 & (imm8|imm32))
 				disp = lass_atoi(op);
@@ -355,7 +396,6 @@ int parse_line(char* line, int pass_no) {
 				syn[0]  = (m >> 3) & 0x7 | r32;
 				rev = 1;
 			}
-			
 			break;
 		}
 		//printf("\t%s\n", pch);
@@ -373,6 +413,7 @@ int parse_line(char* line, int pass_no) {
 			} 
 			if (n == -1) {	// label maybe?
 				immediate = find_symbol(pch);
+				if (pass_no>1) immediate+= elf_offset;
 				imm = 1;
 				//printf("Symbol? %s: 0x%x\n", pch, immediate);
 				n = rel8;
@@ -528,8 +569,9 @@ int main(int argc, char* argv[]) {
 	printf("First pass, finding labels:\n");
 	pass(buffer, sz, 1);
 	//Second pass
-	
+	program_length = current_position;
 	current_position = 0;
+	make_elf();
 	pread(fp, buffer, sz, 0);
 
 	pass(buffer, sz, 2);
@@ -537,6 +579,7 @@ int main(int argc, char* argv[]) {
 
 	FILE* fd = fopen("output", "wb");
 	assert(fd);
+	fwrite(elf_output, 1, sizeof(elf32_ehdr)+sizeof(elf32_phdr), fd);
 	fwrite(output, 1, current_position, fd);
 	fflush(fd);
 	free(buffer);

@@ -1,7 +1,18 @@
 bits 32
+
+; takes edx as argument
+syscall_one:
+	mov eax, 1
+	int 0x80
+	jmp $
+
 main:
-	mov ecx, [ebp]
-	mov eax, [ebp + eax * 8]
-	mov [ebp-8], eax
-	mov eax, 0x10
-	dec ecx
+	push ebp
+	mov ebp, esp
+	mov edx, .string
+	jmp syscall_one
+	pop ebp
+	retn
+
+.string:
+db "HELLO"

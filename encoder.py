@@ -41,7 +41,7 @@ typedef struct _instruction_set {
 '''
 good = ["sreg", "rel8", "rel32", "r8", "r32", "crn", "r16", "rm8", "rm16", "rm32", \
 "imm8", "imm16", "imm32", "eax", "ecx", "edx", "none", "", "ds", "es", "fs", \
-"gs", "cs", "ss"]
+"gs", "cs", "ss", "m"]
 bad = ["xmm", "xmm/m128", "mm"]
 
 not_really_operands = [ "1", "flags", "eflags"]
@@ -89,8 +89,9 @@ with open("opcodes.h", "w") as o:
 				of = of if of else "0"
 
 				if name in one_args:
-					op1 = "rm32"
-					op2 = "none"
+					print(line)
+					op1 = "rm32" if "rm32" in line else "rm8"
+					op2 = "none" 
 				if name in white_list:
 					op1 = "none"
 					op2 = "none"
@@ -103,9 +104,10 @@ with open("opcodes.h", "w") as o:
 					o.write("\t{\"" + name.lower() + "\", " + op1.lower() + ", " + op2.lower() + ", 0x" + code + ", " + ext + ", 0x" + pf + ", 0x" + of + "},\n")
 					last = [name.lower(), op1, op2, code, ext, pf, of]
 
-				elif op1 not in bad and op2 not in bad:
-					print("\t{\"" + name.lower() + "\", " + op1.lower() + ", " + op2.lower() + ", 0x" + code + ", " + ext + ", 0x" + pf + ", 0x" + of + "}")
+				#elif op1 not in bad and op2 not in bad:
+				#	print("\t{\"" + name.lower() + "\", " + op1.lower() + ", " + op2.lower() + ", 0x" + code + ", " + ext + ", 0x" + pf + ", 0x" + of + "}")
 			else:
+				print(line)
 				if last:
 					last[0] = name
 					o.write("\t{\"" + last[0] + "\", " + last[1]  + ", " + last[2]  + ", 0x" + last[3]  + ", " + last[4]  + ", 0x" + last[5]  + ", 0x" + last[6]  + "},\n")
