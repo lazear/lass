@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include <fcntl.h>
 #include <assert.h>
-#include "encoding.h"
+
 #include "opcodes.h"
 #include "elf.h"
 #include <ctype.h>
@@ -570,7 +570,8 @@ int main(int argc, char* argv[]) {
 	//Second pass
 	program_length = current_position;
 	current_position = 0;
-	make_elf();
+	
+	if (strcmp("elf", argv[2])==0) make_elf();
 	pread(fp, buffer, sz, 0);
 
 	pass(buffer, sz, 2);
@@ -578,7 +579,7 @@ int main(int argc, char* argv[]) {
 
 	FILE* fd = fopen("output", "wb");
 	assert(fd);
-	fwrite(elf_output, 1, sizeof(elf32_ehdr)+sizeof(elf32_phdr), fd);
+	fwrite(elf_output, 1, elf_offset, fd);
 	fwrite(output, 1, current_position, fd);
 	fflush(fd);
 	free(buffer);

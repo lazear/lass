@@ -10,5 +10,5 @@ clean:
 	rm *.o
 
 test:
-	$(PROG) new.s
+	$(PROG) new.s bin
 	$(NDI) -b 32 output
