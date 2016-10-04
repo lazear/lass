@@ -1,5 +1,7 @@
 # lass - the lightweight assembler
 
+## USE AT YOUR OWN RISK - THIS IS A WORK IN PROGRESS
+
 ### lass is a lightweight two-pass x86 assembler written in C with a focus on portability
 
 lass uses intel syntax, and currently supports nasm style labels (with $ and $$). 

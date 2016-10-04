@@ -27,7 +27,7 @@ void make_elf() {
 	e->e_type = ET_EXEC;
 	e->e_machine = 3;
 	e->e_version = 1;
-	e->e_entry =elf_offset + find_symbol("main");
+	e->e_entry = find_symbol("main");
 	e->e_phoff = sizeof(elf32_ehdr);
 	e->e_shoff = 0;
 	e->e_flags = 0;
@@ -84,11 +84,11 @@ int add_symbol(char* label) {
 int find_symbol(char* label) {
 	for (int i = 0; i < num_symbols; i++)
 		if (strcmp(symtab[i].name, label) == 0)
-			return symtab[i].position;
+			return symtab[i].position + elf_offset;
 	if (strcmp(label, "$$") == 0)
 		return 0;
 	if (strcmp(label, "$") == 0)
-		return current_position;
+		return current_position + elf_offset;
 
 	unresolved[unr_symbols].position = current_position;
 	//printf("unres sym %s @ 0x%x \n", label, current_position);
@@ -413,8 +413,7 @@ int parse_line(char* line, int pass_no) {
 			} 
 			if (n == -1) {	// label maybe?
 				immediate = find_symbol(pch);
-				if (pass_no>1) immediate+= elf_offset;
-				imm = 1;
+					imm = 1;
 				//printf("Symbol? %s: 0x%x\n", pch, immediate);
 				n = rel8;
 			}
@@ -494,10 +493,10 @@ int parse_line(char* line, int pass_no) {
 					write_dword(immediate);
 					break;
 				case rel8:	// Calculate relative offset
-					write_byte(immediate - current_position - (current_position-start));
+					write_byte(immediate - current_position - (current_position-start) - elf_offset);
 					break;
 				case rel32:
-					write_dword(immediate - current_position - (current_position-start));
+					write_dword(immediate - current_position - (current_position-start) - elf_offset);
 					break;
 				default:	// SIB/Displacement 
 					if (mode == 1)

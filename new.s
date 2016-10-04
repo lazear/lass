@@ -11,8 +11,7 @@ main:
 	mov ebp, esp
 	mov edx, .string
 	jmp syscall_one
-	pop ebp
-	retn
+	jmp $
 
 .string:
 db "HELLO"
