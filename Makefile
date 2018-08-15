@@ -4,7 +4,7 @@ NDI=ndisasm
 all: compile test
 
 compile:
-	 gcc -w -std=gnu99 assembler.c -o $(PROG)
+	 gcc -Wall -std=gnu99 assembler.c -o $(PROG)
 
 clean:
 	rm *.o

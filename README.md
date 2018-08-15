@@ -1,6 +1,6 @@
 # lass - the lightweight assembler
 
-### WORK IN PROGRESS
+### Unmaintained project
 
 ### lass is a lightweight two-pass x86 assembler written in C with a focus on portability
 

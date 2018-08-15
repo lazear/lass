@@ -13,7 +13,7 @@ main:
 	mov edx, .string
 	jmp syscall_one
 
-	lgdt [eax]
+	mov eax, [ebp+4]
 
 .string:
 db "HELLO"
